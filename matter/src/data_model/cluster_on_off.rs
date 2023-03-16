@@ -30,11 +30,19 @@ pub enum Attributes {
     OnOff = 0x0,
 }
 
-#[derive(FromPrimitive)]
+#[derive(FromPrimitive, PartialEq)]
 pub enum Commands {
     Off = 0x0,
     On = 0x01,
     Toggle = 0x02,
+    // OffWithEffect = 0x40,
+    // OnWithRecallGlobalScene = 0x41,
+    // OnWithTimedOff = 0x42,
+}
+
+struct ClusterCallback {
+    name: Commands,
+    callback: Box<dyn FnMut()>,
 }
 
 fn attr_on_off_new() -> Attribute {
@@ -49,15 +57,33 @@ fn attr_on_off_new() -> Attribute {
 
 pub struct OnOffCluster {
     base: Cluster,
+    callbacks: Vec<ClusterCallback>,
 }
 
 impl OnOffCluster {
     pub fn new() -> Result<Box<Self>, Error> {
         let mut cluster = Box::new(OnOffCluster {
             base: Cluster::new(ID)?,
+            callbacks: vec![],
         });
+        // TODO: does this attribute need to be read from persistent state?
         cluster.base.add_attribute(attr_on_off_new())?;
         Ok(cluster)
+    }
+
+    pub fn add_callback(&mut self, name: Commands, callback: Box<dyn FnMut()>) {
+        self.callbacks.push(ClusterCallback {
+            name,
+            callback,
+        })
+    }
+
+    fn run_callback(&mut self, name: Commands) {
+        for cmd in self.callbacks.iter_mut() {
+            if cmd.name == name {
+                (cmd.callback)()
+            }
+        }
     }
 }
 

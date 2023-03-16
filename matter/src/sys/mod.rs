@@ -30,7 +30,13 @@ mod sys_espidf;
 #[cfg(target_os = "espidf")]
 pub use self::sys_espidf::*;
 
-#[cfg(any(target_os = "macos", target_os = "linux", target_os = "espidf"))]
-mod posix;
-#[cfg(any(target_os = "macos", target_os = "linux", target_os = "espidf"))]
-pub use self::posix::*;
+pub mod psm;
+
+pub const SPAKE2_ITERATION_COUNT: u32 = 2000;
+
+/// The Packet Pool that is allocated from. POSIX systems can use
+/// a higher number unlike embedded.
+#[cfg(not(target_os = "espidf"))]
+pub const MAX_PACKET_POOL_SIZE: usize = 25;
+#[cfg(target_os = "espidf")]
+pub const MAX_PACKET_POOL_SIZE: usize = 4;

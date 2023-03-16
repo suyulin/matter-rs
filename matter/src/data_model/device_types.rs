@@ -68,7 +68,7 @@ pub fn device_type_add_root_node(
     Ok(endpoint)
 }
 
-const DEV_TYPE_ON_OFF_LIGHT: DeviceType = DeviceType {
+pub const DEV_TYPE_ON_OFF_LIGHT: DeviceType = DeviceType {
     dtype: 0x0100,
     drev: 2,
 };

@@ -48,9 +48,17 @@ pub fn sys_publish_service(
         error!("Error taking EspMdns service {:?}", e);
         Error::MdnsError
     })?;
-    // TODO: unsure of some parameters here, to check
+    // TODO: mdns fails if this is not set, not sure of what value to use
+    service.set_hostname(format!("local")).unwrap();
+    // service.set_instance_name("instance_name").unwrap(); // not sure what to set here
+    // TODO: a temporary hack, refactor the function
+    let proto = if regtype.contains("_udp") {
+        "_udp"
+    } else {
+        "_tcp"
+    };
     service
-        .add_service(Some(name), regtype, "", port, &kvs)
+        .add_service(Some(name), regtype.split('.').next().unwrap(), proto, port, &kvs)
         .map_err(|e| {
             error!("Error adding EspMdns service {:?}", e);
             Error::MdnsError

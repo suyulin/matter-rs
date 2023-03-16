@@ -27,7 +27,7 @@ use crate::{
     error::Error,
     group_keys::KeySet,
     mdns::{self, Mdns},
-    sys::{Psm, SysMdnsService},
+    sys::{psm::Psm, SysMdnsService},
     tlv::{OctetStr, TLVWriter, TagType, ToTLV, UtfStr},
 };
 
@@ -195,7 +195,7 @@ impl Fabric {
         }
     }
 
-    fn rm_store(&self, index: usize, psm: &MutexGuard<Psm>) {
+    fn rm_store(&self, index: usize, psm: &mut MutexGuard<Psm>) {
         psm.rm(fb_key!(index, ST_RCA));
         psm.rm(fb_key!(index, ST_ICA));
         psm.rm(fb_key!(index, ST_NOC));
@@ -206,7 +206,7 @@ impl Fabric {
         psm.rm(fb_key!(index, ST_VID));
     }
 
-    fn store(&self, index: usize, psm: &MutexGuard<Psm>) -> Result<(), Error> {
+    fn store(&self, index: usize, psm: &mut MutexGuard<Psm>) -> Result<(), Error> {
         let mut key = [0u8; MAX_CERT_TLV_LEN];
         let len = self.root_ca.as_tlv(&mut key)?;
         psm.set_kv_slice(fb_key!(index, ST_RCA), &key[..len])?;
@@ -315,8 +315,8 @@ impl FabricMgr {
     }
 
     fn store(&self, index: usize, fabric: &Fabric) -> Result<(), Error> {
-        let psm = self.psm.lock().unwrap();
-        fabric.store(index, &psm)
+        let mut psm = self.psm.lock().unwrap();
+        fabric.store(index, &mut psm)
     }
 
     fn load(&mut self) -> Result<(), Error> {
@@ -349,9 +349,9 @@ impl FabricMgr {
     pub fn remove(&self, fab_idx: u8) -> Result<(), Error> {
         let fab_idx = fab_idx as usize;
         let mut mgr = self.inner.write().unwrap();
-        let psm = self.psm.lock().unwrap();
+        let mut psm = self.psm.lock().unwrap();
         if let Some(f) = &mgr.fabrics[fab_idx] {
-            f.rm_store(fab_idx, &psm);
+            f.rm_store(fab_idx, &mut psm);
             mgr.fabrics[fab_idx] = None;
             Ok(())
         } else {
@@ -428,8 +428,8 @@ impl FabricMgr {
         if let Some(fabric) = &mut mgr.fabrics[index] {
             let old = fabric.label.clone();
             fabric.label = label;
-            let psm = self.psm.lock().unwrap();
-            if fabric.store(index, &psm).is_err() {
+            let mut psm = self.psm.lock().unwrap();
+            if fabric.store(index, &mut psm).is_err() {
                 fabric.label = old;
                 return Err(Error::StdIoError);
             }

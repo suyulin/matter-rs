@@ -25,7 +25,7 @@ use crate::{
     error::Error,
     fabric,
     interaction_model::messages::GenericPath,
-    sys::Psm,
+    sys::psm::Psm,
     tlv::{FromTLV, TLVElement, TLVList, TLVWriter, TagType, ToTLV},
     transport::session::MAX_CAT_IDS_PER_NOC,
     utils::writebuf::WriteBuf,
@@ -373,7 +373,7 @@ struct AclMgrInner {
 const ACL_KV_ENTRY: &str = "acl";
 const ACL_KV_MAX_SIZE: usize = 300;
 impl AclMgrInner {
-    pub fn store(&self, psm: &MutexGuard<Psm>) -> Result<(), Error> {
+    pub fn store(&self, psm: &mut MutexGuard<Psm>) -> Result<(), Error> {
         let mut acl_tlvs = [0u8; ACL_KV_MAX_SIZE];
         let mut wb = WriteBuf::new(&mut acl_tlvs, ACL_KV_MAX_SIZE);
         let mut tw = TLVWriter::new(&mut wb);
@@ -441,7 +441,7 @@ impl AclMgr {
         } else {
             let psm_handle = Psm::get()?;
             let inner = {
-                let psm_lock = psm_handle.lock().unwrap();
+                let mut psm_lock = psm_handle.lock().unwrap();
                 AclMgrInner::load(&psm_lock)
             };
 
@@ -465,8 +465,8 @@ impl AclMgr {
             inner.entries[i] = None;
         }
         if let Some(psm) = self.psm.as_ref() {
-            let psm = psm.lock().unwrap();
-            let _ = inner.store(&psm).map_err(|e| {
+            let mut psm = psm.lock().unwrap();
+            let _ = inner.store(&mut psm).map_err(|e| {
                 error!("Error in storing ACLs {}", e);
             });
         }
@@ -491,8 +491,8 @@ impl AclMgr {
         inner.entries[index] = Some(entry);
 
         if let Some(psm) = self.psm.as_ref() {
-            let psm = psm.lock().unwrap();
-            inner.store(&psm)
+            let mut psm = psm.lock().unwrap();
+            inner.store(&mut psm)
         } else {
             Ok(())
         }
@@ -505,8 +505,8 @@ impl AclMgr {
         *old = Some(new);
 
         if let Some(psm) = self.psm.as_ref() {
-            let psm = psm.lock().unwrap();
-            inner.store(&psm)
+            let mut psm = psm.lock().unwrap();
+            inner.store(&mut psm)
         } else {
             Ok(())
         }
@@ -518,8 +518,8 @@ impl AclMgr {
         *old = None;
 
         if let Some(psm) = self.psm.as_ref() {
-            let psm = psm.lock().unwrap();
-            inner.store(&psm)
+            let mut psm = psm.lock().unwrap();
+            inner.store(&mut psm)
         } else {
             Ok(())
         }
@@ -538,8 +538,8 @@ impl AclMgr {
         }
 
         if let Some(psm) = self.psm.as_ref() {
-            let psm = psm.lock().unwrap();
-            inner.store(&psm)
+            let mut psm = psm.lock().unwrap();
+            inner.store(&mut psm)
         } else {
             Ok(())
         }
