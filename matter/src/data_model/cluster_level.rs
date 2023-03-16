@@ -15,14 +15,15 @@
  *    limitations under the License.
  */
 
-pub mod core;
-pub mod device_types;
-pub mod objects;
+use crate::{
+    data_model::objects::{Cluster, ClusterType},
+    error::Error,
+};
+use log::info;
+use num_derive::FromPrimitive;
 
-pub mod cluster_basic_information;
-pub mod cluster_level;
-pub mod cluster_media_playback;
-pub mod cluster_on_off;
-pub mod cluster_template;
-pub mod sdm;
-pub mod system_model;
+const ID: u32 = 0x0008;
+
+pub enum Attributes {
+    OnOff = 0x0,
+}

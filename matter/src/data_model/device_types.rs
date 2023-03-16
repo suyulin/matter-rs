@@ -73,6 +73,21 @@ pub const DEV_TYPE_ON_OFF_LIGHT: DeviceType = DeviceType {
     drev: 2,
 };
 
+pub const DEV_TYPE_DIMMABLE_LIGHT: DeviceType = DeviceType {
+    dtype: 0x0101,
+    drev: 2,
+};
+
+pub const DEV_TYPE_COLOR_TEMPERATURE_LIGHT: DeviceType = DeviceType {
+    dtype: 0x010c,
+    drev: 2,
+};
+
+pub const DEV_TYPE_EXTENDED_COLOR_LIGHT: DeviceType = DeviceType {
+    dtype: 0x010d,
+    drev: 2,
+};
+
 pub const DEV_TYPE_ON_SMART_SPEAKER: DeviceType = DeviceType {
     dtype: 0x0022,
     drev: 2,
