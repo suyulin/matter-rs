@@ -1,12 +1,11 @@
-
 use std::{
     convert::TryInto,
     io::{Read, Write},
     sync::{Arc, Mutex, Once},
 };
 
-use esp_idf_svc::nvs::*;
 use embedded_svc::storage::{RawStorage, StorageBase};
+use esp_idf_svc::nvs::*;
 
 use crate::error::Error;
 
@@ -22,9 +21,7 @@ impl Psm {
         let partition = EspDefaultNvsPartition::take().unwrap();
         let nvs = EspNvs::new(partition, "matter_psm", true).unwrap();
 
-        Ok(Self {
-            inner: nvs
-        })
+        Ok(Self { inner: nvs })
     }
 
     pub fn get() -> Result<Arc<Mutex<Self>>, Error> {
@@ -43,9 +40,7 @@ impl Psm {
 
     pub fn get_kv_slice(&self, key: &str, val: &mut Vec<u8>) -> Result<usize, Error> {
         let result = self.inner.get_raw(key, val).unwrap();
-        Ok(result.map(|r| {
-            r.len()
-        }).unwrap_or_default())
+        Ok(result.map(|r| r.len()).unwrap_or_default())
     }
 
     pub fn set_kv_u64(&mut self, key: &str, val: u64) -> Result<(), Error> {

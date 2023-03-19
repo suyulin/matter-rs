@@ -1,5 +1,3 @@
-
-
 #[cfg(target_os = "espidf")]
 mod espidf;
 #[cfg(target_os = "espidf")]

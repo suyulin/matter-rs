@@ -58,7 +58,13 @@ pub fn sys_publish_service(
         "_tcp"
     };
     service
-        .add_service(Some(name), regtype.split('.').next().unwrap(), proto, port, &kvs)
+        .add_service(
+            Some(name),
+            regtype.split('.').next().unwrap(),
+            proto,
+            port,
+            &kvs,
+        )
         .map_err(|e| {
             error!("Error adding EspMdns service {:?}", e);
             Error::MdnsError
