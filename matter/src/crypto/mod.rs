@@ -45,10 +45,10 @@ pub trait CryptoKeyPair {
     fn verify_msg(&self, msg: &[u8], signature: &[u8]) -> Result<(), Error>;
 }
 
-#[cfg(feature = "crypto_esp_mbedtls")]
-mod crypto_esp_mbedtls;
-#[cfg(feature = "crypto_esp_mbedtls")]
-pub use self::crypto_esp_mbedtls::*;
+#[cfg(any(feature = "crypto_esp_mbedtls", feature = "crypto_rustcrypto"))]
+mod crypto_rustcrypto;
+#[cfg(any(feature = "crypto_esp_mbedtls", feature = "crypto_rustcrypto"))]
+pub use self::crypto_rustcrypto::*;
 
 #[cfg(feature = "crypto_mbedtls")]
 mod crypto_mbedtls;

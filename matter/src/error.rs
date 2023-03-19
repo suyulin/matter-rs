@@ -77,6 +77,13 @@ impl From<std::io::Error> for Error {
     }
 }
 
+#[cfg(feature = "rustcrypto")]
+impl From<ccm::aead::Error> for Error {
+    fn from(_e: ccm::aead::Error) -> Self {
+        Self::Crypto
+    }
+}
+
 impl<T> From<PoisonError<T>> for Error {
     fn from(_e: PoisonError<T>) -> Self {
         Self::RwLock

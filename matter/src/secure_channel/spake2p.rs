@@ -35,8 +35,8 @@ use super::crypto_openssl::CryptoOpenSSL;
 #[cfg(feature = "crypto_mbedtls")]
 use super::crypto_mbedtls::CryptoMbedTLS;
 
-#[cfg(feature = "crypto_esp_mbedtls")]
-use super::crypto_esp_mbedtls::CryptoEspMbedTls;
+#[cfg(any(feature = "crypto_esp_mbedtls", feature = "crypto_rustcrypto"))]
+use super::crypto_rustcrypto::CryptoRustCrypto;
 
 use super::{common::SCStatusCodes, crypto::CryptoSpake2};
 
@@ -94,9 +94,9 @@ fn crypto_spake2_new() -> Result<Box<dyn CryptoSpake2>, Error> {
     Ok(Box::new(CryptoMbedTLS::new()?))
 }
 
-#[cfg(feature = "crypto_esp_mbedtls")]
+#[cfg(any(feature = "crypto_esp_mbedtls", feature = "crypto_rustcrypto"))]
 fn crypto_spake2_new() -> Result<Box<dyn CryptoSpake2>, Error> {
-    Ok(Box::new(CryptoEspMbedTls::new()?))
+    Ok(Box::new(CryptoRustCrypto::new()?))
 }
 
 impl Default for Spake2P {
@@ -309,7 +309,7 @@ mod tests {
             0x4, 0xa1, 0xd2, 0xc6, 0x11, 0xf0, 0xbd, 0x36, 0x78, 0x67, 0x79, 0x7b, 0xfe, 0x82,
             0x36, 0x0,
         ];
-        let mut w0w1s: [u8; (2 * CRYPTO_W_SIZE_BYTES)] = [0; (2 * CRYPTO_W_SIZE_BYTES)];
+        let mut w0w1s: [u8; 2 * CRYPTO_W_SIZE_BYTES] = [0; (2 * CRYPTO_W_SIZE_BYTES)];
         Spake2P::get_w0w1s(123456, 2000, &salt, &mut w0w1s);
         assert_eq!(
             w0w1s,

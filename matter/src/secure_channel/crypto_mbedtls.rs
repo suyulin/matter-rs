@@ -114,6 +114,7 @@ impl CryptoSpake2 for CryptoMbedTLS {
         Ok(())
     }
 
+    #[allow(non_snake_case)]
     fn set_L(&mut self, l: &[u8]) -> Result<(), Error> {
         self.L = EcPoint::from_binary(&self.group, l)?;
         Ok(())
