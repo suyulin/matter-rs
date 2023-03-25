@@ -15,20 +15,24 @@
  *    limitations under the License.
  */
 
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 
-use aes::{Aes128, Aes256};
+use aes::Aes128;
 use ccm::{
     aead::generic_array::GenericArray,
-    consts::{U10, U13, U16},
+    consts::{U13, U16},
     Ccm,
 };
 use elliptic_curve::sec1::{FromEncodedPoint, ToEncodedPoint};
 use hmac::Mac;
 use log::error;
 use p256::ecdsa::{SigningKey, VerifyingKey};
-use rand::Rng;
 use sha2::Digest;
+use x509_cert::{
+    attr::AttributeType,
+    der::{asn1::BitString, Any, Encode},
+    spki::{AlgorithmIdentifier, SubjectPublicKeyInfoOwned},
+};
 
 use crate::error::Error;
 
@@ -36,7 +40,6 @@ use super::CryptoKeyPair;
 
 type HmacSha256I = hmac::Hmac<sha2::Sha256>;
 type AesCcm = Ccm<Aes128, U16, U13>;
-type Aes256Ccm = Ccm<Aes256, U10, U13>;
 
 #[derive(Clone)]
 pub struct Sha256 {
@@ -90,7 +93,6 @@ impl HmacSha256 {
     }
 }
 
-// Why do we need to store pub and secret? Shouldn't we store both together?
 pub enum KeyType {
     Private(p256::SecretKey),
     Public(p256::PublicKey),
@@ -110,11 +112,15 @@ impl KeyPair {
         })
     }
 
-    pub fn new_from_components(_pub_key: &[u8], priv_key: &[u8]) -> Result<Self, Error> {
-        error!("This API new_from_components should never get called");
-        panic!()
+    pub fn new_from_components(pub_key: &[u8], priv_key: &[u8]) -> Result<Self, Error> {
+        let secret_key = p256::SecretKey::from_slice(priv_key).unwrap();
+        let encoded_point = p256::EncodedPoint::from_bytes(pub_key).unwrap();
+        let public_key = p256::PublicKey::from_encoded_point(&encoded_point).unwrap();
+        assert_eq!(public_key, secret_key.public_key());
 
-        // Ok(Self {})
+        Ok(Self {
+            key: KeyType::Private(secret_key),
+        })
     }
 
     pub fn new_from_public(pub_key: &[u8]) -> Result<Self, Error> {
@@ -130,18 +136,87 @@ impl KeyPair {
             KeyType::Public(k) => *(k.as_affine()),
         }
     }
+
+    fn private_key(&self) -> Result<&p256::SecretKey, Error> {
+        match &self.key {
+            KeyType::Private(key) => Ok(key),
+            KeyType::Public(_) => Err(Error::Crypto),
+        }
+    }
 }
 
 impl CryptoKeyPair for KeyPair {
-    fn get_private_key(&self, _priv_key: &mut [u8]) -> Result<usize, Error> {
-        panic!("This API get_private_key should never get called");
-
-        // I'm unsure of what format the bytes should be.
-        Err(Error::Invalid)
+    fn get_private_key(&self, priv_key: &mut [u8]) -> Result<usize, Error> {
+        match &self.key {
+            KeyType::Private(key) => {
+                let bytes = key.to_bytes();
+                let slice = bytes.as_slice();
+                let len = slice.len();
+                priv_key.copy_from_slice(slice);
+                Ok(len)
+            }
+            KeyType::Public(_) => Err(Error::Crypto),
+        }
     }
-    fn get_csr<'a>(&self, _out_csr: &'a mut [u8]) -> Result<&'a [u8], Error> {
-        panic!("This API get_csr should never get called");
-        Err(Error::Invalid)
+    fn get_csr<'a>(&self, out_csr: &'a mut [u8]) -> Result<&'a [u8], Error> {
+        use p256::ecdsa::signature::Signer;
+
+        let subject =
+            x509_cert::name::RdnSequence(vec![x509_cert::name::RelativeDistinguishedName(
+                vec![x509_cert::attr::AttributeTypeAndValue {
+                    oid: x509_cert::attr::AttributeType::new_unwrap("2.5.4.10"),
+                    value: x509_cert::attr::AttributeValue::new(
+                        x509_cert::der::Tag::Utf8String,
+                        "CSR".as_bytes(),
+                    )
+                    .unwrap(),
+                }]
+                .try_into()
+                .unwrap(),
+            )]);
+        let mut pubkey = [0; 65];
+        self.get_public_key(&mut pubkey).unwrap();
+        let info = x509_cert::request::CertReqInfo {
+            version: x509_cert::request::Version::V1,
+            subject,
+            public_key: SubjectPublicKeyInfoOwned {
+                algorithm: AlgorithmIdentifier {
+                    oid: AttributeType::new_unwrap("1.2.840.10045.2.1"),
+                    parameters: Some(
+                        Any::new(
+                            x509_cert::der::Tag::ObjectIdentifier,
+                            AttributeType::new_unwrap("1.2.840.10045.3.1.7").as_bytes(),
+                        )
+                        .unwrap(),
+                    ),
+                },
+                subject_public_key: BitString::from_bytes(&pubkey).unwrap(),
+            },
+            attributes: Default::default(),
+        };
+        let mut message = vec![];
+        info.encode(&mut message).unwrap();
+
+        // Can't use self.sign_msg as the signature has to be in DER format
+        let private_key = self.private_key()?;
+        let signing_key = SigningKey::from(private_key);
+        let sig: p256::ecdsa::Signature = signing_key.sign(&message);
+        let to_der = sig.to_der();
+        let signature = to_der.as_bytes();
+
+        let cert = x509_cert::request::CertReq {
+            info,
+            algorithm: AlgorithmIdentifier {
+                oid: AttributeType::new_unwrap("1.2.840.10045.4.3.2"),
+                parameters: None,
+            },
+            signature: BitString::from_bytes(signature).unwrap(),
+        };
+        let out = cert.to_der().unwrap();
+        let a = &mut out_csr[0..out.len()];
+        a.copy_from_slice(&out);
+
+        Ok(a)
     }
     fn get_public_key(&self, pub_key: &mut [u8]) -> Result<usize, Error> {
         let point = self.public_key_point().to_encoded_point(false);
@@ -150,12 +225,28 @@ impl CryptoKeyPair for KeyPair {
         pub_key[..len].copy_from_slice(bytes);
         Ok(len)
     }
-    fn derive_secret(self, _peer_pub_key: &[u8], _secret: &mut [u8]) -> Result<usize, Error> {
-        panic!("This API derive_secret should never get called");
-        Err(Error::Invalid)
+    fn derive_secret(self, peer_pub_key: &[u8], secret: &mut [u8]) -> Result<usize, Error> {
+        let encoded_point = p256::EncodedPoint::from_bytes(peer_pub_key).unwrap();
+        let peer_pubkey = p256::PublicKey::from_encoded_point(&encoded_point).unwrap();
+        let private_key = self.private_key()?;
+        let shared_secret = elliptic_curve::ecdh::diffie_hellman(
+            private_key.to_nonzero_scalar(),
+            peer_pubkey.as_affine(),
+        );
+        let bytes = shared_secret.raw_secret_bytes();
+        let bytes = bytes.as_slice();
+        let len = bytes.len();
+        assert_eq!(secret.len(), len);
+        secret.copy_from_slice(bytes);
+
+        Ok(len)
     }
     fn sign_msg(&self, msg: &[u8], signature: &mut [u8]) -> Result<usize, Error> {
         use p256::ecdsa::signature::Signer;
+
+        if signature.len() < super::EC_SIGNATURE_LEN_BYTES {
+            return Err(Error::NoSpace);
+        }
 
         match &self.key {
             KeyType::Private(k) => {
@@ -176,7 +267,7 @@ impl CryptoKeyPair for KeyPair {
         let signature = p256::ecdsa::Signature::try_from(signature).unwrap();
 
         verifying_key
-            .verify(&msg, &signature)
+            .verify(msg, &signature)
             .map_err(|_| Error::InvalidSignature)?;
 
         Ok(())
@@ -184,7 +275,7 @@ impl CryptoKeyPair for KeyPair {
 }
 
 pub fn pbkdf2_hmac(pass: &[u8], iter: usize, salt: &[u8], key: &mut [u8]) -> Result<(), Error> {
-    pbkdf2::pbkdf2::<hmac::Hmac<sha2::Sha256>>(pass, salt, iter as u32, key);
+    pbkdf2::pbkdf2::<hmac::Hmac<sha2::Sha256>>(pass, salt, iter as u32, key).unwrap();
 
     Ok(())
 }
@@ -206,15 +297,14 @@ pub fn encrypt_in_place(
     data: &mut [u8],
     data_len: usize,
 ) -> Result<usize, Error> {
-    use ccm::aead::Aead;
     use ccm::{AeadInPlace, KeyInit};
 
     let key = GenericArray::from_slice(key);
     let nonce = GenericArray::from_slice(nonce);
-    let cipher = AesCcm::new(&key);
+    let cipher = AesCcm::new(key);
     // This is probably incorrect
     let mut buffer = data[0..data_len].to_vec();
-    cipher.encrypt_in_place(&nonce, ad, &mut buffer)?;
+    cipher.encrypt_in_place(nonce, ad, &mut buffer)?;
     let len = buffer.len();
     data.clone_from_slice(&buffer[..]);
 
@@ -227,15 +317,14 @@ pub fn decrypt_in_place(
     ad: &[u8],
     data: &mut [u8],
 ) -> Result<usize, Error> {
-    use ccm::aead::Aead;
     use ccm::{AeadInPlace, KeyInit};
 
     let key = GenericArray::from_slice(key);
     let nonce = GenericArray::from_slice(nonce);
-    let cipher = AesCcm::new(&key);
+    let cipher = AesCcm::new(key);
     // This is probably incorrect
     let mut buffer = data.to_vec();
-    cipher.decrypt_in_place(&nonce, ad, &mut buffer)?;
+    cipher.decrypt_in_place(nonce, ad, &mut buffer)?;
     let len = buffer.len();
     data[..len].copy_from_slice(&buffer[..]);
 

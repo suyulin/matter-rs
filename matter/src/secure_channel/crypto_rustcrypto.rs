@@ -15,8 +15,11 @@
  *    limitations under the License.
  */
 
+use crypto_bigint::Encoding;
+use crypto_bigint::U384;
 use elliptic_curve::ops::*;
 use elliptic_curve::sec1::{FromEncodedPoint, ToEncodedPoint};
+use elliptic_curve::Field;
 use elliptic_curve::PrimeField;
 use sha2::Digest;
 
@@ -54,9 +57,8 @@ pub struct CryptoRustCrypto {
 impl CryptoSpake2 for CryptoRustCrypto {
     #[allow(non_snake_case)]
     fn new() -> Result<Self, Error> {
-        let M = p256::EncodedPoint::from_bytes(&MATTER_M_BIN).unwrap();
-        let N = p256::EncodedPoint::from_bytes(&MATTER_N_BIN).unwrap();
-        // TODO: how do we generate a new point?
+        let M = p256::EncodedPoint::from_bytes(MATTER_M_BIN).unwrap();
+        let N = p256::EncodedPoint::from_bytes(MATTER_N_BIN).unwrap();
         let L = p256::EncodedPoint::default();
         let pB = p256::EncodedPoint::default();
 
@@ -76,8 +78,23 @@ impl CryptoSpake2 for CryptoRustCrypto {
         // From the Matter Spec,
         //         w0 = w0s mod p
         //   where p is the order of the curve
+        let operand: [u8; 32] = [
+            0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+            0xff, 0xff, 0xbc, 0xe6, 0xfa, 0xad, 0xa7, 0x17, 0x9e, 0x84, 0xf3, 0xb9, 0xca, 0xc2,
+            0xfc, 0x63, 0x25, 0x51,
+        ];
+        let mut expanded = [0u8; 384 / 8];
+        expanded[16..].copy_from_slice(&operand);
+        let big_operand = U384::from_be_slice(&expanded);
+        let mut expanded = [0u8; 384 / 8];
+        expanded[8..].copy_from_slice(w0s);
+        let big_w0 = U384::from_be_slice(&expanded);
+        let w0_res = big_w0.reduce(&big_operand).unwrap();
+        let mut w0_out = [0u8; 32];
+        w0_out.copy_from_slice(&w0_res.to_be_bytes()[16..]);
+
         let w0s = p256::Scalar::from_repr(
-            *elliptic_curve::generic_array::GenericArray::from_slice(w0s),
+            *elliptic_curve::generic_array::GenericArray::from_slice(&w0_out),
         )
         .unwrap();
         // Scalar is module the curve's order by definition, no further op needed
@@ -90,8 +107,23 @@ impl CryptoSpake2 for CryptoRustCrypto {
         // From the Matter Spec,
         //         w1 = w1s mod p
         //   where p is the order of the curve
+        let operand: [u8; 32] = [
+            0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+            0xff, 0xff, 0xbc, 0xe6, 0xfa, 0xad, 0xa7, 0x17, 0x9e, 0x84, 0xf3, 0xb9, 0xca, 0xc2,
+            0xfc, 0x63, 0x25, 0x51,
+        ];
+        let mut expanded = [0u8; 384 / 8];
+        expanded[16..].copy_from_slice(&operand);
+        let big_operand = U384::from_be_slice(&expanded);
+        let mut expanded = [0u8; 384 / 8];
+        expanded[8..].copy_from_slice(w1s);
+        let big_w1 = U384::from_be_slice(&expanded);
+        let w1_res = big_w1.reduce(&big_operand).unwrap();
+        let mut w1_out = [0u8; 32];
+        w1_out.copy_from_slice(&w1_res.to_be_bytes()[16..]);
+
         let w1s = p256::Scalar::from_repr(
-            *elliptic_curve::generic_array::GenericArray::from_slice(w1s),
+            *elliptic_curve::generic_array::GenericArray::from_slice(&w1_out),
         )
         .unwrap();
         // Scalar is module the curve's order by definition, no further op needed
@@ -137,8 +169,8 @@ impl CryptoSpake2 for CryptoRustCrypto {
         //   - select random y between 0 to p
         //   - Y = y*P + w0*N
         //   - pB = Y
-
-        // TODO generate random number
+        let mut rng = rand::thread_rng();
+        self.xy = p256::Scalar::random(&mut rng);
 
         let P = p256::AffinePoint::GENERATOR;
         let N = p256::AffinePoint::from_encoded_point(&self.N).unwrap();
@@ -172,7 +204,7 @@ impl CryptoSpake2 for CryptoRustCrypto {
         // Y = pB
         Self::add_to_tt(&mut TT, pB)?;
 
-        let X = p256::EncodedPoint::from_bytes(&pA).unwrap();
+        let X = p256::EncodedPoint::from_bytes(pA).unwrap();
         let X = p256::AffinePoint::from_encoded_point(&X).unwrap();
         let L = p256::AffinePoint::from_encoded_point(&self.L).unwrap();
         let M = p256::AffinePoint::from_encoded_point(&self.M).unwrap();
@@ -326,7 +358,7 @@ mod tests {
             .unwrap();
             c.set_w0(&t.w0).unwrap();
             c.set_w1(&t.w1).unwrap();
-            let Y = p256::EncodedPoint::from_bytes(&t.Y).unwrap();
+            let Y = p256::EncodedPoint::from_bytes(t.Y).unwrap();
             let Y = p256::AffinePoint::from_encoded_point(&Y).unwrap();
             let N = p256::AffinePoint::from_encoded_point(&c.N).unwrap();
             let (Z, V) = CryptoRustCrypto::get_ZV_as_prover(c.w0, c.w1, N, Y, x).unwrap();
@@ -346,9 +378,9 @@ mod tests {
             )
             .unwrap();
             c.set_w0(&t.w0).unwrap();
-            let X = p256::EncodedPoint::from_bytes(&t.X).unwrap();
+            let X = p256::EncodedPoint::from_bytes(t.X).unwrap();
             let X = p256::AffinePoint::from_encoded_point(&X).unwrap();
-            let L = p256::EncodedPoint::from_bytes(&t.L).unwrap();
+            let L = p256::EncodedPoint::from_bytes(t.L).unwrap();
             let L = p256::AffinePoint::from_encoded_point(&L).unwrap();
             let M = p256::AffinePoint::from_encoded_point(&c.M).unwrap();
             let (Z, V) = CryptoRustCrypto::get_ZV_as_verifier(c.w0, L, M, X, y).unwrap();
