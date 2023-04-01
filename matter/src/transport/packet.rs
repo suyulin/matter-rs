@@ -183,7 +183,7 @@ impl<'a> Packet<'a> {
         self.proto.unset_reliable()
     }
 
-    pub fn is_reliable(&mut self) -> bool {
+    pub fn is_reliable(&self) -> bool {
         self.proto.is_reliable()
     }
 

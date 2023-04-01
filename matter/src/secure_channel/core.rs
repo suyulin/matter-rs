@@ -65,12 +65,13 @@ impl proto_demux::HandleProto for SecureChannel {
                 error!("OpCode Not Handled: {:?}", proto_opcode);
                 Err(Error::InvalidOpcode)
             }
-        };
-        if result == Ok(ResponseRequired::Yes) {
+        }?;
+
+        if result == ResponseRequired::Yes {
             info!("Sending response");
             tlv::print_tlv_list(ctx.tx.as_borrow_slice());
         }
-        result
+        Ok(result)
     }
 
     fn get_proto_id(&self) -> usize {

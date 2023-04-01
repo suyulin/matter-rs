@@ -87,7 +87,6 @@ impl HmacSha256 {
     pub fn finish(self, out: &mut [u8]) -> Result<(), Error> {
         let result = &self.inner.finalize().into_bytes()[..];
         assert!(result.len() == out.len(), "Buffers not equal");
-        // TODO: efficient way of replacing the slice?
         out.clone_from_slice(result);
         Ok(())
     }

@@ -441,7 +441,7 @@ impl AclMgr {
         } else {
             let psm_handle = Psm::get()?;
             let inner = {
-                let mut psm_lock = psm_handle.lock().unwrap();
+                let psm_lock = psm_handle.lock().unwrap();
                 AclMgrInner::load(&psm_lock)
             };
 

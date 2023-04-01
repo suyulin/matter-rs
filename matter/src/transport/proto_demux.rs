@@ -87,9 +87,9 @@ impl ProtoDemux {
         if proto_id >= MAX_PROTOCOLS {
             return Err(Error::Invalid);
         }
-        return self.proto_id_handlers[proto_id]
+        self.proto_id_handlers[proto_id]
             .as_mut()
             .ok_or(Error::NoHandler)?
-            .handle_proto_id(proto_ctx);
+            .handle_proto_id(proto_ctx)
     }
 }
