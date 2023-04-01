@@ -28,9 +28,11 @@ use crate::interaction_model::command::CommandReq;
 use crate::interaction_model::core::IMStatusCode;
 use crate::interaction_model::messages::ib;
 use crate::tlv::{FromTLV, OctetStr, TLVElement, TLVWriter, TagType, ToTLV, UtfStr};
+use crate::transport::packet::{Packet, PacketPool};
 use crate::transport::session::SessionMode;
 use crate::utils::writebuf::WriteBuf;
-use crate::{cmd_enter, error::*};
+use crate::{cmd_enter, error::*, secure_channel};
+use boxslab::Slab;
 use log::{error, info};
 use num_derive::FromPrimitive;
 
@@ -177,6 +179,15 @@ impl NocCluster {
             return Err(NocStatus::InsufficientPrivlege);
         }
 
+        // XXX Quick Hack for validation
+        if let Ok(ack_packet) = Packet::new_tx() {
+            if let Some(mut ack_packet) = Slab::<PacketPool>::try_new(ack_packet) {
+                secure_channel::common::create_mrp_standalone_ack(&mut ack_packet);
+                let result = cmd_req.trans.exch.send(ack_packet, cmd_req.trans.session);
+                println!("Sent ack result {:?}", result);
+            }
+        }
+
         let r = AddNocReq::from_tlv(&cmd_req.data).map_err(|_| NocStatus::InvalidNOC)?;
 
         let noc_value = Cert::new(r.noc_value.0).map_err(|_| NocStatus::InvalidNOC)?;
@@ -188,7 +199,6 @@ impl NocCluster {
         } else {
             None
         };
-
         let fabric = Fabric::new(
             noc_data.key_pair,
             noc_data.root_ca,
