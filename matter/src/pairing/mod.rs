@@ -92,6 +92,7 @@ pub fn print_pairing_code_and_qr(
     let data_str = payload_base38_representation(&qr_code_data).expect("Failed to encode");
 
     pretty_print_pairing_code(&pairing_code);
+    info!("qrcode_data: {}", &data_str);
     print_qr_code(&data_str);
 }
 
